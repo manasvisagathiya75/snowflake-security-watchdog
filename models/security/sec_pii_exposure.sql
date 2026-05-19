@@ -1,4 +1,8 @@
-{{ config(materialized='view', schema='security') }}
+{{ config(
+    materialized='view',
+    schema='security',
+    snowflake_warehouse='DEV_WH'
+) }}
 
 WITH masked_columns AS (
     SELECT
@@ -7,29 +11,16 @@ WITH masked_columns AS (
         c.table_name,
         c.column_name,
         c.data_type,
+        {{ flag_sensitive_column('c.column_name') }} AS pii_classification,
         CASE
-            WHEN LOWER(c.column_name) ILIKE '%email%'      THEN 'email - masked'
-            WHEN LOWER(c.column_name) ILIKE '%phone%'      THEN 'phone - masked'
-            WHEN LOWER(c.column_name) ILIKE '%ssn%'        THEN 'ssn - masked'
-            WHEN LOWER(c.column_name) ILIKE '%address%'    THEN 'address - masked'
-            WHEN LOWER(c.column_name) ILIKE '%password%'   THEN 'password - EXPOSED'
-            WHEN LOWER(c.column_name) ILIKE '%secret%'     THEN 'secret - EXPOSED'
-            WHEN LOWER(c.column_name) ILIKE '%credit_card%' THEN 'credit card - EXPOSED'
-            WHEN LOWER(c.column_name) ILIKE '%dob%'        THEN 'date of birth - EXPOSED'
-            WHEN LOWER(c.column_name) ILIKE '%birth%'      THEN 'date of birth - EXPOSED'
-            ELSE NULL
-        END AS pii_classification,
-        CASE
-            WHEN LOWER(c.column_name) ILIKE '%email%'      THEN 'PROTECTED'
-            WHEN LOWER(c.column_name) ILIKE '%phone%'      THEN 'PROTECTED'
-            WHEN LOWER(c.column_name) ILIKE '%ssn%'        THEN 'PROTECTED'
-            WHEN LOWER(c.column_name) ILIKE '%address%'    THEN 'PROTECTED'
-            WHEN LOWER(c.column_name) ILIKE '%password%'   THEN 'EXPOSED - ACTION REQUIRED'
-            WHEN LOWER(c.column_name) ILIKE '%secret%'     THEN 'EXPOSED - ACTION REQUIRED'
-            WHEN LOWER(c.column_name) ILIKE '%credit_card%' THEN 'EXPOSED - ACTION REQUIRED'
-            WHEN LOWER(c.column_name) ILIKE '%dob%'        THEN 'EXPOSED - ACTION REQUIRED'
-            WHEN LOWER(c.column_name) ILIKE '%birth%'      THEN 'EXPOSED - ACTION REQUIRED'
-            ELSE NULL
+            WHEN {{ flag_sensitive_column('c.column_name') }} = 'NOT_SENSITIVE'
+                THEN NULL
+            WHEN LOWER(c.column_name) ILIKE '%email%'
+              OR LOWER(c.column_name) ILIKE '%phone%'
+              OR LOWER(c.column_name) ILIKE '%ssn%'
+              OR LOWER(c.column_name) ILIKE '%address%'
+                THEN 'PROTECTED'
+            ELSE 'EXPOSED - ACTION REQUIRED'
         END AS exposure_status,
         CURRENT_TIMESTAMP AS checked_at
     FROM ANALYTICS.INFORMATION_SCHEMA.COLUMNS c
@@ -37,5 +28,5 @@ WITH masked_columns AS (
 )
 
 SELECT * FROM masked_columns
-WHERE pii_classification IS NOT NULL
+WHERE pii_classification != 'NOT_SENSITIVE'
 ORDER BY exposure_status DESC, table_name, column_name
