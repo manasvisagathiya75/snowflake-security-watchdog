@@ -1,0 +1,35 @@
+version: 2
+
+sources:
+  - name: snowflake_account_usage
+    database: SNOWFLAKE
+    schema: ACCOUNT_USAGE
+    description: "Snowflake system views for account monitoring and security auditing"
+    tables:
+      - name: query_history
+        description: "Complete history of all queries run in the account including bytes scanned, rows produced, and execution status"
+      - name: login_history
+        description: "All login attempts both successful and failed including source IP and timestamp"
+      - name: grants_to_users
+        description: "All role grants assigned to users including who granted them and when"
+
+  - name: analytics_raw
+    database: ANALYTICS
+    schema: RAW
+    description: "Raw data landing zone — source data before any transformation"
+    tables:
+      - name: customers
+        description: "Customer records containing PII — column masking policies applied to email, phone, SSN, and address"
+        columns:
+          - name: customer_id
+            description: "Unique customer identifier"
+          - name: full_name
+            description: "Customer full name"
+          - name: email
+            description: "Customer email — masked for REPORTER role"
+          - name: phone
+            description: "Customer phone — masked showing last 4 digits only"
+          - name: ssn
+            description: "Social security number — fully redacted for non-admin roles"
+          - name: address
+            description: "Customer address — fully redacted for non-admin roles"
