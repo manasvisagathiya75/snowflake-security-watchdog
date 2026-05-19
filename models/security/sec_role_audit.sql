@@ -1,4 +1,8 @@
-{{ config(materialized='view', schema='security') }}
+{{ config(
+    materialized='view',
+    schema='security',
+    snowflake_warehouse='DEV_WH'
+) }}
 
 WITH role_grants AS (
     SELECT
@@ -6,14 +10,14 @@ WITH role_grants AS (
         role AS granted_role,
         granted_by,
         created_on
-    FROM SNOWFLAKE.ACCOUNT_USAGE.GRANTS_TO_USERS
+    FROM {{ source('snowflake_account_usage', 'grants_to_users') }}
 ),
 
 user_last_login AS (
     SELECT
         user_name,
         MAX(event_timestamp) AS last_login
-    FROM SNOWFLAKE.ACCOUNT_USAGE.LOGIN_HISTORY
+    FROM {{ source('snowflake_account_usage', 'login_history') }}
     WHERE is_success = 'YES'
     GROUP BY user_name
 ),

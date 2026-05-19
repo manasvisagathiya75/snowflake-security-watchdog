@@ -1,6 +1,7 @@
 {{ config(
     materialized='view',
-    schema='security'
+    schema='security',
+    snowflake_warehouse='DEV_WH'
 ) }}
 
 WITH query_log AS (
@@ -13,7 +14,7 @@ WITH query_log AS (
         rows_produced,
         start_time,
         execution_status
-    FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+    FROM {{ source('snowflake_account_usage', 'query_history') }}
     WHERE start_time >= DATEADD(day, -7, CURRENT_TIMESTAMP)
 ),
 

@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: sec_anomalous_queries
+    description: "Detects suspicious query patterns in Snowflake — flags large scans, off-hours access, and sensitive column queries"
+
+  - name: sec_role_audit
+    description: "Audits Snowflake user roles and flags over-privileged or inactive accounts"
+
+  - name: sec_pii_exposure
+    description: "Scans all columns in the ANALYTICS database and identifies PII that is exposed or protected"
+
+  - name: sec_summary
+    description: "Executive security health summary — aggregates all security models into a single status report"
