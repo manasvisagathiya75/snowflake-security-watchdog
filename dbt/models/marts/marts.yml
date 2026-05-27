@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: mart_vulnerability_summary
+    description: >
+      Aggregated vulnerability counts and risk scores grouped by severity,
+      age_bucket, and vulnerability_category. Each row represents one unique
+      combination of those three dimensions. Used for trend dashboards and
+      SLA reporting.
+    columns:
+      - name: severity
+        description: "GitHub severity rating (critical / high / medium / low)."
+        tests:
+          - not_null
+      - name: age_bucket
+        description: "Age classification: new / recent / aging / chronic."
+        tests:
+          - not_null
+      - name: vulnerability_category
+        description: "Keyword-based vulnerability category derived from the advisory summary."
+        tests:
+          - not_null
+      - name: total_count
+        description: "Number of advisories in this severity × age_bucket × category group."
+        tests:
+          - not_null
+      - name: avg_cvss_score
+        description: "Average CVSS v3 base score for the group. Null if no scores exist in the group."
+      - name: avg_composite_risk_score
+        description: "Average composite risk score (CVSS × age multiplier) for the group."
+      - name: max_composite_risk_score
+        description: "Highest composite risk score observed in the group."
+      - name: critical_count
+        description: "Count of advisories in the group where cvss_score >= 9.0."
+
+  - name: mart_ecosystem_risk
+    description: >
+      Per-ecosystem risk aggregation built by lateral-flattening the
+      AFFECTED_PACKAGES VARIANT column from ANALYTICS.RAW.RAW_GITHUB_ADVISORIES
+      and joining with int_vulnerabilities_enriched. One row per distinct package
+      ecosystem (pip, npm, go, maven, etc.), ordered by average risk score descending.
+    columns:
+      - name: ecosystem_name
+        description: "Package ecosystem name extracted from the AFFECTED_PACKAGES VARIANT array (e.g. pip, npm, go, maven)."
+        tests:
+          - not_null
+          - unique
+      - name: total_vulnerabilities
+        description: "Count of distinct advisories affecting this ecosystem."
+        tests:
+          - not_null
+      - name: critical_count
+        description: "Number of advisories in this ecosystem with severity = 'critical'."
+      - name: high_count
+        description: "Number of advisories in this ecosystem with severity = 'high'."
+      - name: avg_risk_score
+        description: "Average composite risk score across all advisories in this ecosystem, rounded to 2 dp."
+      - name: max_risk_score
+        description: "Highest composite risk score observed in this ecosystem."

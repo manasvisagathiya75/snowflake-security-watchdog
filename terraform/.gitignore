@@ -1,0 +1,12 @@
+# Terraform working directory
+.terraform/
+
+# Lock file — commit this to pin provider versions in team projects
+.terraform.lock.hcl
+
+# State files — never commit; use remote state (S3, Terraform Cloud, etc.)
+terraform.tfstate
+terraform.tfstate.backup
+
+# Variable files often contain secrets
+*.tfvars

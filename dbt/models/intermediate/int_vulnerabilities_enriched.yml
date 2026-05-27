@@ -1,0 +1,80 @@
+version: 2
+
+models:
+  - name: int_vulnerabilities_enriched
+    description: >
+      Enriched vulnerability records built on top of stg_github_advisories.
+      Adds age classification, a risk multiplier that penalises long-unpatched
+      vulnerabilities, a composite risk score (CVSS × age multiplier), and a
+      keyword-based vulnerability category. One row per advisory; withdrawn
+      advisories are already excluded by the upstream staging model.
+    columns:
+      - name: advisory_id
+        description: "GitHub Security Advisory identifier. Primary key inherited from stg_github_advisories."
+        tests:
+          - not_null
+          - unique
+
+      - name: cve_id
+        description: "Linked CVE identifier, if assigned. Nullable."
+
+      - name: summary
+        description: "One-line human-readable summary of the vulnerability."
+
+      - name: description
+        description: "Full markdown description of the advisory."
+
+      - name: severity
+        description: "GitHub severity rating (critical / high / medium / low)."
+
+      - name: cvss_score
+        description: "CVSS v3 base score (0.0 – 10.0). Null when no vector has been published."
+
+      - name: published_at
+        description: "Timestamp when the advisory was first published on GitHub (UTC)."
+
+      - name: updated_at
+        description: "Timestamp of the most recent edit to the advisory (UTC)."
+
+      - name: ingested_at
+        description: "Timestamp when the record was written into the RAW layer (UTC)."
+
+      - name: is_critical
+        description: "TRUE when cvss_score >= 9.0. FALSE when below threshold or when score is null."
+
+      - name: days_since_published
+        description: "Integer calendar days between published_at and today."
+
+      - name: age_bucket
+        description: >
+          Categorical age band: 'new' (≤30 days), 'recent' (31–90 days),
+          'aging' (91–365 days), 'chronic' (>365 days).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['new', 'recent', 'aging', 'chronic']
+
+      - name: age_risk_multiplier
+        description: >
+          Numeric multiplier applied to CVSS score to reflect remediation urgency over time:
+          new=1.0, recent=1.2, aging=1.5, chronic=2.0.
+        tests:
+          - not_null
+
+      - name: vulnerability_category
+        description: >
+          Keyword-based category derived from the advisory summary:
+          code_execution, privilege_escalation, data_exposure, auth_bypass,
+          path_traversal, or other.
+        tests:
+          - not_null
+
+      - name: composite_risk_score
+        description: >
+          ROUND(COALESCE(cvss_score, 0) × age_risk_multiplier, 2).
+          Combines severity and age into a single actionable risk number.
+          Advisories without a CVSS score are treated as 0.0 so the column
+          is always non-null.
+        tests:
+          - not_null

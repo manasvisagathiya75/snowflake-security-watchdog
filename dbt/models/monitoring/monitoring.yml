@@ -1,0 +1,3 @@
+version: 2
+
+# mart_pipeline_health is documented in dbt/models/marts/mart_pipeline_health.yml

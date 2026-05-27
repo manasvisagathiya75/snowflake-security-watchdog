@@ -1,0 +1,72 @@
+version: 2
+
+models:
+  - name: mart_critical_vulnerabilities
+    config:
+      contract:
+        enforced: true
+    description: >
+      Individual high-priority advisories where composite_risk_score >= 9.0,
+      ordered by descending composite risk score. Intended for triage dashboards
+      and operational alert feeds where immediate remediation action is required.
+      Because composite_risk_score = COALESCE(cvss_score, 0) × age_multiplier,
+      every row here is guaranteed to have a real cvss_score value.
+    columns:
+      - name: advisory_id
+        data_type: varchar
+        constraints:
+          - type: not_null
+        description: "GitHub Security Advisory identifier. Unique in this model."
+        tests:
+          - not_null
+          - unique
+
+      - name: cve_id
+        data_type: varchar
+        description: "Linked CVE identifier, if assigned. Nullable."
+
+      - name: summary
+        data_type: varchar
+        description: "One-line human-readable summary of the vulnerability."
+
+      - name: severity
+        data_type: varchar
+        constraints:
+          - type: not_null
+        description: "GitHub severity rating (critical / high / medium / low)."
+        tests:
+          - not_null
+
+      - name: cvss_score
+        data_type: float
+        constraints:
+          - type: not_null
+        description: "CVSS v3 base score. Non-null here because composite_risk_score >= 9.0 requires a real CVSS value."
+        tests:
+          - not_null
+
+      - name: composite_risk_score
+        data_type: float
+        constraints:
+          - type: not_null
+        description: "CVSS × age multiplier, rounded to 2 dp. Always >= 9.0 in this model."
+        tests:
+          - not_null
+
+      - name: age_bucket
+        data_type: varchar
+        constraints:
+          - type: not_null
+        description: "Age classification: new / recent / aging / chronic."
+
+      - name: days_since_published
+        data_type: number
+        description: "Integer calendar days between published_at and today."
+
+      - name: vulnerability_category
+        data_type: varchar
+        description: "Keyword-based vulnerability category."
+
+      - name: published_at
+        data_type: timestamp_tz
+        description: "Timestamp when the advisory was first published (UTC)."

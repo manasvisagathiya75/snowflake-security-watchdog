@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: stg_github_advisories
+    description: >
+      Staged GitHub Security Advisories sourced from ANALYTICS.RAW.RAW_GITHUB_ADVISORIES.
+      One row per advisory. Withdrawn advisories are excluded. Severity is lowercased
+      and two derived columns (is_critical, days_since_published) are added for
+      downstream convenience.
+    columns:
+      - name: advisory_id
+        description: "GitHub Security Advisory identifier (GHSA-xxxx-xxxx-xxxx). Primary key of this model."
+        tests:
+          - not_null
+          - unique
+
+      - name: cve_id
+        description: "Linked CVE identifier (CVE-YYYY-NNNNN), if one has been assigned. Nullable."
+
+      - name: summary
+        description: "One-line human-readable summary of the vulnerability."
+
+      - name: description
+        description: "Full markdown description of the advisory, including impact and remediation detail."
+
+      - name: severity
+        description: "Severity rating assigned by GitHub: critical, high, medium, or low (lowercased)."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['critical', 'high', 'medium', 'low']
+
+      - name: cvss_score
+        description: "CVSS v3 base score (0.0 – 10.0). Null when no CVSS vector has been published."
+
+      - name: published_at
+        description: "Timestamp when the advisory was first published on GitHub (UTC)."
+        tests:
+          - not_null
+
+      - name: updated_at
+        description: "Timestamp of the most recent edit to the advisory on GitHub (UTC)."
+
+      - name: ingested_at
+        description: "Timestamp when this record was written into the RAW layer by the ingestion pipeline (UTC)."
+
+      - name: is_critical
+        description: "TRUE when cvss_score >= 9.0 (CVSS critical threshold). FALSE when score is below 9.0 or null."
+
+      - name: days_since_published
+        description: "Integer number of calendar days between published_at and today. Useful for ageing / SLA reporting."

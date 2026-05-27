@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: mart_pipeline_health
+    config:
+      contract:
+        enforced: true
+    description: >
+      Single-row pipeline health snapshot for ANALYTICS.RAW.RAW_GITHUB_ADVISORIES.
+      Computes freshness, volume metrics, and an overall status signal each time
+      the model is refreshed. Intended for monitoring dashboards and alerting:
+      query checked_at + pipeline_status to detect stale or low-volume loads
+      without touching the raw table directly.
+    columns:
+      - name: source_table
+        data_type: varchar
+        constraints:
+          - type: not_null
+        description: "Name of the RAW source table being monitored."
+        tests:
+          - not_null
+
+      - name: last_ingested_at
+        data_type: timestamp_tz
+        constraints:
+          - type: not_null
+        description: "MAX(INGESTED_AT) across all rows — timestamp of the most recent record written by the ingestion pipeline."
+        tests:
+          - not_null
+
+      - name: hours_since_last_load
+        data_type: number
+        description: "Integer hours between last_ingested_at and the time this model was built."
+
+      - name: total_rows
+        data_type: number
+        description: "Total row count in RAW_GITHUB_ADVISORIES at build time."
+
+      - name: rows_last_24h
+        data_type: number
+        description: "Rows whose INGESTED_AT falls within the last 24 hours."
+
+      - name: rows_last_7d
+        data_type: number
+        description: "Rows whose INGESTED_AT falls within the last 7 days."
+
+      - name: avg_daily_rows_7d
+        data_type: number
+        description: "rows_last_7d / 7.0 rounded to the nearest integer — baseline daily volume estimate."
+
+      - name: is_fresh
+        data_type: boolean
+        description: "TRUE when hours_since_last_load <= 25 (allows a one-hour grace period over a 24 h schedule)."
+
+      - name: is_row_count_normal
+        data_type: boolean
+        description: "TRUE when rows_last_24h >= avg_daily_rows_7d * 0.5 — flags drops below 50 % of the 7-day daily average."
+
+      - name: pipeline_status
+        data_type: varchar
+        constraints:
+          - type: not_null
+        description: >
+          Composite health signal: 'healthy' — fresh and normal volume;
+          'low_volume_warning' — fresh but row count dropped > 50 % vs 7-day average;
+          'stale' — last load is older than 25 hours; 'unknown' — catch-all.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['healthy', 'low_volume_warning', 'stale', 'unknown']
+
+      - name: checked_at
+        data_type: timestamp_tz
+        description: "CURRENT_TIMESTAMP()::timestamp_tz at the moment the model was built."

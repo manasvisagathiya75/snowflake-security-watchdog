@@ -1,0 +1,30 @@
+name: 'security_watchdog'
+version: '1.0.0'
+config-version: 2
+
+profile: 'security_watchdog'
+
+model-paths: ["models"]
+test-paths:  ["tests"]
+macro-paths: ["macros"]
+seed-paths:  ["seeds"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  security_watchdog:
+    staging:
+      +materialized: view
+      +schema: STAGING
+    intermediate:
+      +materialized: table
+      +schema: INTERMEDIATE
+    marts:
+      +materialized: table
+      +schema: MARTS
+    monitoring:
+      +materialized: table
+      +schema: MARTS

@@ -1,0 +1,40 @@
+version: 2
+
+exposures:
+  - name: security_operations_dashboard
+    type: dashboard
+    description: >
+      Daily security briefing showing critical CVEs, ecosystem risk rankings,
+      and composite risk scores for engineering and security leads.
+    depends_on:
+      - ref('mart_critical_vulnerabilities')
+      - ref('mart_ecosystem_risk')
+      - ref('mart_vulnerability_summary')
+    owner:
+      name: Manasvi Sagathiya
+      email: manasvisagathiya73@gmail.com
+
+  - name: pipeline_health_monitor
+    type: ml
+    description: >
+      Automated pipeline observability monitor tracking ingestion freshness,
+      row count anomalies, and data quality status across the CVE intelligence
+      platform.
+    depends_on:
+      - ref('mart_pipeline_health')
+    owner:
+      name: Manasvi Sagathiya
+      email: manasvisagathiya73@gmail.com
+
+  - name: vulnerability_anomaly_detector
+    type: application
+    description: >
+      Snowpark-powered statistical anomaly detector that flags CVEs deviating
+      more than 2 standard deviations from their ecosystem risk baseline.
+      Results stored in SECURITY.VULNERABILITY_ANOMALIES.
+    depends_on:
+      - ref('mart_vulnerability_summary')
+      - ref('mart_critical_vulnerabilities')
+    owner:
+      name: Manasvi Sagathiya
+      email: manasvisagathiya73@gmail.com

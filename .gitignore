@@ -1,0 +1,30 @@
+# Secrets & credentials
+.env
+*.pem
+keys/
+terraform/terraform.tfvars
+
+# Terraform state & cache
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/bin/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# dbt generated artefacts
+dbt/target/
+dbt/logs/
+
+# Reports (generated output, may contain vuln details)
+reports/

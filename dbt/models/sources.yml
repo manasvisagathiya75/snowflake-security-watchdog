@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: raw
+    database: ANALYTICS
+    schema: RAW
+    description: "Raw API responses landed by the ingestion layer. Never modified after load."
+    tables:
+      - name: RAW_GITHUB_ADVISORIES
+        description: "Flattened GitHub Security Advisory records ingested from the GitHub REST API."
+        config:
+          loaded_at_field: INGESTED_AT
+          freshness:
+            warn_after:  {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
+
+      - name: RAW_NVD_CVES
+        description: "CVE records ingested from the NIST NVD REST API v2.0."
+        config:
+          loaded_at_field: INGESTED_AT
+          freshness:
+            warn_after:  {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
