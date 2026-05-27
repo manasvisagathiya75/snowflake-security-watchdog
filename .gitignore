@@ -25,6 +25,10 @@ build/
 # dbt generated artefacts
 dbt/target/
 dbt/logs/
+target/
+dbt_packages/
+logs/
+dbt_internal_packages/
 
 # Reports (generated output, may contain vuln details)
 reports/
