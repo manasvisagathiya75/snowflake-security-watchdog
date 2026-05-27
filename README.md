@@ -62,24 +62,6 @@ flag_sensitive_column.sql    ← reusable PII detection macro
 
 ---
 
-## Architecture
-
-SNOWFLAKE.ACCOUNT_USAGE          ANALYTICS.RAW
-query_history ─────────────→  customers (PII masked)
-login_history ──────┐
-grants_to_users ────┘
-│
-▼
-sec_anomalous_queries    sec_pii_exposure ──→ sec_pii_snapshot
-sec_role_audit                    │
-│                          │
-└──────────────────────────┘
-│
-▼
-sec_summary
-(security health score)
----
-
 ## Snowflake schemas used
 
 | Schema | Purpose |
