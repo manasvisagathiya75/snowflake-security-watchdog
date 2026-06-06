@@ -1,189 +1,65 @@
 # Snowflake Security Watchdog
 
-A DBT-native security monitoring layer that detects threats
-and enforces data protection inside a Snowflake data warehouse.
-Built to demonstrate the intersection of data engineering and
-security engineering.
+A Cloud Security Intelligence Platform that ingests vulnerability data from public advisory feeds, lands it in Snowflake, transforms it through dbt layers, and surfaces anomalies, threat briefs, and infrastructure drift — all in one automated pipeline.
 
 ---
 
-## What problem does this solve?
+## What problem does it solve?
 
-Most data teams focus on pipeline reliability and data quality
-but ignore security. This project adds a security monitoring
-layer directly inside dbt — using the same tools and skills
-data engineers already have — without needing a separate
-security tooling budget.
-
----
-
-## Threat model — what this detects
-
-| Threat | Model | How |
-|--------|-------|-----|
-| Anomalous queries — large scans, off-hours access, sensitive column queries | `sec_anomalous_queries` | Queries ACCOUNT_USAGE.QUERY_HISTORY and flags suspicious patterns |
-| Over-privileged users and inactive admin accounts | `sec_role_audit` | Audits GRANTS_TO_USERS against LOGIN_HISTORY |
-| PII columns without masking policies | `sec_pii_exposure` | Scans INFORMATION_SCHEMA.COLUMNS for sensitive column names |
-| Historical PII exposure changes | `sec_pii_snapshot` | SCD Type 2 snapshot tracks every change to column exposure status |
-| Overall security health | `sec_summary` | Aggregates all models into a single executive dashboard |
-
+Security teams typically track CVEs and advisories manually, and infrastructure drift goes undetected until something breaks. This platform automates the full cycle: pull live vulnerability data from GitHub and NIST, score and classify it inside Snowflake, detect statistical anomalies with Snowpark, generate a weekly threat brief with Claude AI, and flag Terraform drift — all from a single CLI command.
 
 ---
 
 ## Security controls implemented
 
-- Column-level masking policies on email, phone, SSN,
-  address, and date of birth
-- Role-based data access — ACCOUNTADMIN sees real data,
-  REPORTER sees masked data, same query same table
-- Automated detection of suspicious query patterns
-- Automated access control audit against login history
-- PII exposure tracker across entire warehouse
-- SCD Type 2 snapshot — full audit trail of every PII
-  exposure change with timestamps
-- source() references enabling full dbt lineage tracking
+- **Statistical anomaly detection** — Snowpark computes per-category z-scores over `MART_VULNERABILITY_SUMMARY`; any row where `|z_score| > 2` is written to `SECURITY.VULNERABILITY_ANOMALIES`
+- **Composite risk scoring** — `composite_risk_score = cvss_score × age_risk_multiplier` (1.0–2.0 based on how long a vuln has been unpatched), surfacing chronic high-CVSS issues that point-in-time snapshots miss
+- **Age bucketing** — vulnerabilities are classified as `new / recent / aging / chronic` to prioritize remediation beyond raw CVSS
+- **Infrastructure drift detection** — `terraform plan -detailed-exitcode` runs as a pipeline step; exit code 2 (drift detected) is recorded to `SECURITY.INFRASTRUCTURE_DRIFT`
+- **SCD Type 2 snapshots** — `snap_ecosystem_risk` and `snap_pipeline_health` maintain full history with `dbt_valid_from` / `dbt_valid_to`, creating an audit trail of how risk posture changed over time
+- **Enforced dbt contract** on `mart_critical_vulnerabilities` — column names and data types are locked; breaking changes fail the build
+- **Pipeline health monitoring** — `mart_pipeline_health` tracks ingestion freshness and row counts per source, with `healthy / stale / empty` status
 
 ---
 
-## Project structure
-models/
-security/
-sec_anomalous_queries.sql  ← flags suspicious queries
-sec_role_audit.sql         ← audits user permissions
-sec_pii_exposure.sql       ← tracks PII column exposure
-sec_summary.sql            ← executive security dashboard
-schema.yml                 ← model descriptions
-sources.yml                ← documented data sources
-snapshots/
-sec_pii_snapshot.sql         ← SCD Type 2 historical tracking
-macros/
-generate_schema_name.sql     ← schema routing macro
-flag_sensitive_column.sql    ← reusable PII detection macro
+## What I learned
 
----
+**The scale of today's security problem**
 
-## Snowflake schemas used
+The security landscape is staggering in its size. NIST's NVD alone tracks over 250,000 published CVEs, with thousands added every month across every major language ecosystem. GitHub's Advisory Database adds another layer — ecosystem-specific vulnerabilities in pip, npm, Go, and Maven that never make it onto a security team's radar until something is actively exploited. No human team can monitor this volume manually. The only viable response is automated ingestion, classification, and prioritization — which is exactly what this platform does.
 
-| Schema | Purpose |
-|--------|---------|
-| RAW | Raw source data with masking policies applied |
-| STAGING | dbt staging models |
-| SECURITY | All security monitoring models and snapshot |
+**dbt as a seamless transformation layer for security data**
 
----
+dbt proved to be far more than an ETL tool. It enforces a clean separation between raw API responses (immutable, stored as Snowflake VARIANT), typed staging views, enrichment logic in intermediate models, and aggregated marts consumed downstream. The `contract.enforced: true` setting on `mart_critical_vulnerabilities` locks column names and types at build time — a breaking schema change fails the pipeline before it reaches production. The layered RAW → STAGING → INTERMEDIATE → MARTS pattern means every transformation is testable, documented, and replayable from source, which matters deeply for security data where audit traceability is not optional.
 
-## Roles and access control
+**Snowpark: Python intelligence running inside the warehouse**
 
-| Role | Access |
-|------|--------|
-| ACCOUNTADMIN | Full access — sees real PII data |
-| TRANSFORMER | Write access to all schemas — used by dbt |
-| REPORTER | Read-only on MARTS — sees masked PII data |
+Snowpark changed how I think about where computation belongs. Instead of pulling data out of Snowflake into a local Python process for anomaly detection, Snowpark runs the z-score window functions directly inside the warehouse — the data never leaves. This is the right model for security analytics: keep sensitive vulnerability data in the governed environment and push the computation to it, not the other way around. Writing Python DataFrame logic that compiles to Snowflake SQL also made the anomaly detection portable and testable without a live cluster.
 
----
+**NIST NVD and GitHub APIs: external security validation**
 
-## How to deploy
+Working with the NVD REST API v2.0 and GitHub's Advisory GraphQL API taught me that external security intelligence is only as good as your ingestion discipline. The NVD enforces rate limits (0.6 s per request with an API key, 6 s without) and uses a specific date format (`YYYY-MM-DDTHH:MM:SS.000+00:00`) that breaks silently if wrong. GitHub's cursor-based GraphQL pagination requires tracking continuation tokens across pages. Both APIs update existing records in place, which means an append-only load strategy will silently miss corrections — the MERGE-based upsert pattern (bulk load into a temp table, then MERGE on primary ID) ensures the warehouse always reflects the latest advisory state. External feeds like these represent the world's collective knowledge of known vulnerabilities; getting the ingestion right is the foundation everything else depends on.
 
-**Requirements:** Snowflake account, dbt Core or dbt Cloud
+**Internal vs external security validation**
 
-**2. Set up Snowflake — run in a worksheet as ACCOUNTADMIN**
-```sql
-CREATE WAREHOUSE IF NOT EXISTS DEV_WH
-  WAREHOUSE_SIZE = 'X-SMALL'
-  AUTO_SUSPEND = 60
-  AUTO_RESUME = TRUE;
+This project made the distinction between internal and external security validation concrete. External validation — pulling from NIST NVD and GitHub Advisories — tells you what the world knows is vulnerable. Internal validation — Snowpark anomaly detection, pipeline health monitoring, SCD Type 2 snapshots, and enforced dbt contracts — tells you whether your own data, pipelines, and infrastructure are behaving as expected. Both are necessary. A platform that only watches external feeds will miss the anomaly in its own data. A platform that only monitors itself will miss the CVE that was quietly published last week affecting a dependency it runs on. The combination is what makes this a real security intelligence platform rather than just a dashboard.
 
-CREATE DATABASE IF NOT EXISTS ANALYTICS;
-CREATE SCHEMA IF NOT EXISTS ANALYTICS.RAW;
-CREATE SCHEMA IF NOT EXISTS ANALYTICS.SECURITY;
+**Terraform and infrastructure drift**
 
-CREATE ROLE IF NOT EXISTS TRANSFORMER;
-GRANT USAGE ON WAREHOUSE DEV_WH TO ROLE TRANSFORMER;
-GRANT ALL ON DATABASE ANALYTICS TO ROLE TRANSFORMER;
-GRANT ALL ON ALL SCHEMAS IN DATABASE ANALYTICS TO ROLE TRANSFORMER;
-GRANT ALL ON FUTURE TABLES IN DATABASE ANALYTICS TO ROLE TRANSFORMER;
-
-GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE TRANSFORMER;
-```
-
-**3. Run the models**
-
-dbt build
-**4. Run the snapshot**
-dbt snapshot
-
-
-**5. Query the security dashboard**
-```sql
-SELECT * FROM ANALYTICS.SECURITY.SEC_SUMMARY;
-```
-
----
-
-## Key dbt concepts demonstrated
-
-| Concept | Where used |
-|---------|-----------|
-| Sources with source() references | sec_anomalous_queries, sec_role_audit |
-| Custom schema routing macro | macros/generate_schema_name.sql |
-| Reusable macro | macros/flag_sensitive_column.sql |
-| SCD Type 2 snapshot | snapshots/sec_pii_snapshot.sql |
-| Model descriptions and documentation | schema.yml, sources.yml |
-| Multi-model ref() dependencies | sec_summary refs all 3 models |
-| View and table materializations | security views, summary table |
-| Snowflake warehouse config per model | snowflake_warehouse in config block |
-
----
-
-## Key Snowflake security concepts demonstrated
-
-| Concept | Where used |
-|---------|-----------|
-| Column-level masking policies | ANALYTICS.RAW.CUSTOMERS |
-| Role-based access control (RBAC) | TRANSFORMER, REPORTER roles |
-| ACCOUNT_USAGE telemetry | Query history, login history, grants |
-| Principle of least privilege | REPORTER read-only on MARTS only |
-| PII classification | sec_pii_exposure model |
-| Security audit trail | sec_pii_snapshot SCD Type 2 |
-
----
-
-## Security concepts covered
-
-- Principle of least privilege
-- Column-level security and data masking
-- Anomaly detection using query telemetry
-- PII classification and exposure tracking
-- SOC 2 access review requirements
-- Role-based access control (RBAC)
-- SCD Type 2 for security audit trails
-- Data lineage for security traceability
-
----
-
-## What I learned building this
-
-- Snowflake's ACCOUNT_USAGE schema is a rich source of
-  security telemetry that most data engineers never use
-- Column masking policies enforce different data views per
-  role with zero changes to consumer query logic
-- The same SQL and dbt skills used for analytics pipelines
-  apply directly to security monitoring
-- Access control auditing (sec_role_audit) is a core SOC 2
-  requirement — this model automates what auditors check manually
-- SCD Type 2 snapshots turn a point-in-time security view
-  into a full audit trail — critical for compliance
-- source() references are not just best practice — they
-  enable lineage, testing, and documentation that hardcoded
-  table references cannot
+Terraform drift is one of the most underappreciated risks in cloud security. Infrastructure declared in code and infrastructure actually running in the cloud diverge constantly — through manual console changes, emergency hotfixes, or partial applies. Running `terraform plan -detailed-exitcode` as a pipeline step means drift is detected on every ingestion run, not just when an engineer happens to remember. Exit code 2 means Terraform found differences between declared and actual state; that result is written to `SECURITY.INFRASTRUCTURE_DRIFT` with a timestamp, creating a persistent record of when drift appeared and how long it persisted. The lesson: infrastructure state validation belongs in the data pipeline, not in a separate manual process that nobody runs consistently.
 
 ---
 
 ## Tools used
 
-- Snowflake — warehouse, ACCOUNT_USAGE telemetry,
-  masking policies, RBAC
-- dbt Cloud — transformation, snapshots, macros,
-  documentation, lineage
-- SQL — anomaly detection, access auditing, PII classification
-- GitHub — version control and portfolio hosting
+| Layer | Tool |
+|---|---|
+| Data sources | GitHub Advisory GraphQL API, NIST NVD REST API v2.0 |
+| Ingestion | Python (`requests`, `snowflake-connector-python`, `snowflake-snowpark-python`) |
+| Warehouse | Snowflake (ANALYTICS database, key-pair auth) |
+| Transformation | dbt Core (RAW → STAGING → INTERMEDIATE → MARTS) |
+| Anomaly detection | Snowpark (Python, window functions, z-scores) |
+| Threat brief | Claude AI (`anthropic` SDK) |
+| Infrastructure | Terraform (Snowflake provider) |
+| Env management | `python-dotenv`, PKCS8 private key |
+
